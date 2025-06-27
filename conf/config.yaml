@@ -1,0 +1,17 @@
+# Root paths
+paths:
+  raw_data: "data/raw"
+  processed_data: "data/processed"
+  quarantined_data: "data/quarantined"
+  great_expectations_root: "great_expectations"
+
+# Data Generator Settings
+data_generator:
+  num_records: 1000000
+  num_files: 5
+  dirty_fraction: 0.05 # 5% of records will be "dirty"
+
+# Spark Settings
+spark:
+  app_name: "AegisPipeline"
+  master: "local[*]" # Use all available cores

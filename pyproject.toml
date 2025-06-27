@@ -1,0 +1,39 @@
+[project]
+name = "aegis_framework"
+version = "0.1.0"
+description = "Aegis: A Professional-Grade Data Integrity Framework"
+authors = [{ name = "Santtosh Muniyandy", email = "santtosh6783@gmail.com" }]
+requires-python = ">=3.9"
+
+# Define all dependencies here
+dependencies = [
+    "pyspark==3.3.0",
+    "pyyaml",
+    "great_expectations",
+    "hydra-core"
+]
+
+[project.optional-dependencies]
+# Dependencies only needed for development (testing, linting)
+dev = [
+    "pytest",
+    "pytest-cov",
+    "hypothesis",
+    "ruff",
+    "black",
+    "pre-commit"
+]
+
+# Configuration for Ruff (our linter)
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "W", "I", "C90", "N", "UP", "B"] # Select rule sets
+ignore = []
+
+# Configuration for Black (our formatter)
+[tool.black]
+line-length = 100
+
+[tool.setuptools]
+# Do not auto-discover packages, be explicit
+packages = ["aegis"]

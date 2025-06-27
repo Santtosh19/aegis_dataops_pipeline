@@ -1,0 +1,12 @@
+pyspark==3.3.0
+pyyaml
+great_expectations
+hydra-core
+
+[dev]
+pytest
+pytest-cov
+hypothesis
+ruff
+black
+pre-commit

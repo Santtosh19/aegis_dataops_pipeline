@@ -22,12 +22,6 @@ jobs:
 
       - name: Lint with Ruff
         run: |
-          # The --select and --target-version are already in pyproject.toml,
-          # but we can be explicit for critical checks. We will add the 'check'
-          # subcommand and separate the --format argument.
-          ruff check --select E9,F63,F7,F82 .
-          # For the main check, we just run 'ruff check' and it will use
-          # the settings from our pyproject.toml file.
           ruff check .
 
       - name: Generate Test Data

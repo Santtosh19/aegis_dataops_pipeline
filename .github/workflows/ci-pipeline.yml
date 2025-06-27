@@ -41,6 +41,18 @@ jobs:
       - name: Run Unit Tests with Coverage and Test Reports
         run: pytest --cov=aegis --cov-report=xml --junitxml=junit.xml
 
+      - name: Upload Coverage to Codecov
+        uses: codecov/codecov-action@v4.0.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.xml # Be explicit about which file to upload
+
+      # --- ADD THIS NEW STEP ---
+      - name: Upload Test Results to Codecov
+        uses: codecov/test-results-action@v1
+        with:
+          files: ./junit.xml # Tell this action to upload the JUnit file
+
       # Step 7: Run the full pipeline as an integration test
       - name: Run PySpark Pipeline (Integration Test)
         run: |

@@ -9,6 +9,10 @@ jobs:
       matrix:
         python-version: ['3.9', '3.10']
 
+    defaults:
+      run:
+        working-directory: ./aegis_dataops_pipeline
+
     steps:
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4

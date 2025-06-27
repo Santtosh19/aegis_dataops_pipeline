@@ -38,8 +38,8 @@ jobs:
         run: ruff check .
 
       # Step 6: Run Unit Tests with Coverage
-      - name: Run Unit Tests with Coverage
-        run: pytest --cov=aegis --cov-report=xml
+      - name: Run Unit Tests with Coverage and Test Reports
+        run: pytest --cov=aegis --cov-report=xml --junitxml=junit.xml
 
       # Step 7: Run the full pipeline as an integration test
       - name: Run PySpark Pipeline (Integration Test)
@@ -57,6 +57,7 @@ jobs:
           path: |
             run_summary.json
             coverage.xml
+            junit.xml
 
   # The security scan job remains the same.
   security-scan:

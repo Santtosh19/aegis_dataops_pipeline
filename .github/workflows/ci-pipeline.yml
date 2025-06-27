@@ -9,61 +9,56 @@ jobs:
       matrix:
         python-version: ['3.9', '3.10']
 
-    defaults:
-      run:
-        working-directory: ./aegis_dataops_pipeline
-
     steps:
+      # Step 1: Checkout the code
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      # Step 2: Set up the correct Python version from our matrix
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
 
-
+      # Step 3: Set up dependency caching
       - name: Cache Pip Dependencies
         uses: actions/cache@v3
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}
+          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
           restore-keys: |
-            ${{ runner.os }}-pip-
+            ${{ runner.os }}-pip-${{ matrix.python-version }}-
 
+      # Step 4: Install all dependencies. THIS IS THE CORRECTED COMMAND.
       - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+        run: python -m pip install ".[dev]"
 
+      # Step 5: Lint with Ruff
       - name: Lint with Ruff
         run: ruff check .
 
+      # Step 6: Run Unit Tests with Coverage
       - name: Run Unit Tests with Coverage
         run: pytest --cov=aegis --cov-report=xml
 
-      - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-            token: ${{ secrets.CODECOV_TOKEN }}
-
-      - name: Generate Test Data
+      # Step 7: Run the full pipeline as an integration test
+      - name: Run PySpark Pipeline (Integration Test)
         run: |
           export NUM_RECORDS=10000
           python scripts/generate_data.py
-
-      - name: Run PySpark Pipeline (Integration Test)
-        run: |
           python aegis/pipeline.py
 
-      # --- NEW ARTIFACT UPLOAD STEP ---
+      # Step 8: Upload all our result artifacts
       - name: Upload Run Artifacts
-        # This action runs 'always()', so even if a previous step fails,
-        # it will try to upload the reports for debugging.
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: run-artifacts
+          name: run-artifacts-${{ matrix.python-version }}
           path: |
             run_summary.json
             coverage.xml
+
+  # The security scan job remains the same.
   security-scan:
     name: Security Scan (Trufflehog)
     runs-on: ubuntu-latest
@@ -71,7 +66,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0 # Fetch all history for a deep scan
+          fetch-depth: 0
 
       - name: Run Trufflehog secret scanner
         uses: trufflesecurity/trufflehog@main

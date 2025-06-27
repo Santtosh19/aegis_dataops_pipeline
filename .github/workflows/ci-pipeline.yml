@@ -18,8 +18,7 @@ jobs:
       - name: Cache Pip Dependencies
         uses: actions/cache@v3
         with:
-          path: ~/.cache/pip # The directory to cache
-          # Create a new cache if requirements change
+          path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}
           restore-keys: |
             ${{ runner.os }}-pip-
@@ -32,9 +31,9 @@ jobs:
       - name: Lint with Ruff
         run: ruff check .
 
-      # --- NEW TEST STEP ---
-      - name: Run Unit Tests with Pytest
-        run: pytest
+      - name: Run Unit Tests with Coverage
+        # This now runs pytest and tells it to generate a coverage.xml report
+        run: pytest --cov=aegis --cov-report=xml
 
       - name: Generate Test Data
         run: |
@@ -44,3 +43,15 @@ jobs:
       - name: Run PySpark Pipeline (Integration Test)
         run: |
           python aegis/pipeline.py
+
+      # --- NEW ARTIFACT UPLOAD STEP ---
+      - name: Upload Run Artifacts
+        # This action runs 'always()', so even if a previous step fails,
+        # it will try to upload the reports for debugging.
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: run-artifacts
+          path: |
+            run_summary.json
+            coverage.xml

@@ -1,9 +1,10 @@
 # aegis/pipeline.py
-
-# --- Imports ---
+import json  # <-- Import json
+import logging  # <-- Import logging
 import os
 import shutil
 import sys
+import time  # <-- Import time
 
 import hydra
 from omegaconf import DictConfig
@@ -11,6 +12,10 @@ from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.functions import avg, col, count, from_unixtime, hour, udf
 from pyspark.sql.functions import sum as _sum
 from pyspark.sql.types import DoubleType
+
+# --- Setup a structured logger ---
+# We get a logger for this specific module
+log = logging.getLogger(__name__)
 
 # --- Environment and UDF Setup ---
 os.environ["PYSPARK_PYTHON"] = sys.executable
@@ -30,72 +35,53 @@ safe_cast_udf = udf(safe_cast_to_double, DoubleType())
 
 
 def cleanup_output_dirs(cfg: DictConfig):
-    """Forcefully deletes output directories, ignoring errors if they are locked."""
-    print("--- Cleaning up old output directories ---")
-    for path_key in ["processed_data", "quarantined_data"]:
+    log.info("--- Cleaning up old output directories ---")
+    for path_key in ["processed_data", "quarantined_data", "run_summary_path"]:
         dir_path = cfg.paths.get(path_key)
+        # For summary, we delete the file, not the dir
+        if path_key == "run_summary_path" and os.path.exists(dir_path):
+            os.remove(dir_path)
+            continue
         if dir_path and os.path.exists(dir_path):
-            print(f"Attempting to delete directory: {dir_path}")
+            log.info(f"Deleting directory: {dir_path}")
             try:
                 shutil.rmtree(dir_path)
-                print(f"Successfully deleted {dir_path}")
+                log.info(f"Successfully deleted {dir_path}")
             except OSError as e:
-                # If we get a permission error, just print a warning and continue.
-                print(f"WARNING: Could not delete {dir_path}. Reason: {e}. Continuing anyway.")
+                log.warning(f"Could not delete {dir_path}. Reason: {e}. Continuing anyway.")
 
 
-# --- THE NEW PYSPARK-NATIVE QUALITY GATEWAY ---
 def validate_and_separate_data(df: DataFrame) -> tuple[DataFrame, DataFrame]:
-    """
-    Validates data using PySpark and separates it into clean and quarantined dataframes.
-    """
-    print("Applying data quality rules...")
-
-    # Define all the "good" conditions at once
+    log.info("Applying data quality rules...")
     valid_status_codes = ["200", "201", "400", "404", "500"]
-
-    # We chain all the conditions for what makes a "clean" record
     clean_df = df.filter(
         col("device_id").isNotNull()
         & col("status_code").isin(valid_status_codes)
-        &
-        # Check that our safe cast does NOT produce a null
-        safe_cast_udf(col("temperature")).isNotNull()
+        & safe_cast_udf(col("temperature")).isNotNull()
     )
-
-    # The quarantined records are simply all records that are NOT in the clean set.
-    # This is a much more reliable way to find them.
     quarantined_df = df.join(clean_df, on=df.columns, how="left_anti")
-
     return clean_df, quarantined_df
 
 
-# --- Main Pipeline Logic ---
 def run_pipeline(spark: SparkSession, cfg: DictConfig):
-    """Main ETL logic function with built-in PySpark validation."""
-
-    # --- Data Loading ---
-    print("--- Loading Raw Data ---")
+    start_time = time.time()
+    log.info("--- Loading Raw Data ---")
     raw_df = spark.read.csv(cfg.paths.raw_data, header=True, inferSchema=True)
 
-    # --- Data Validation Step ---
-    print("\n--- Phase 2: PySpark Data Quality Gateway ---")
+    log.info("\n--- Phase 2: PySpark Data Quality Gateway ---")
     clean_df, quarantined_df = validate_and_separate_data(raw_df)
 
-    print(f"Found {quarantined_df.count()} records to quarantine.")
-    print(f"Proceeding with {clean_df.count()} valid records.")
+    quarantined_count = quarantined_df.count()
+    clean_count = clean_df.count()
+    log.info(f"Found {quarantined_count} records to quarantine.")
+    log.info(f"Proceeding with {clean_count} valid records.")
 
-    # Write quarantined data
     quarantined_df.write.mode("overwrite").parquet(cfg.paths.quarantined_data)
 
-    # --- Data Transformation Step ---
-    print("\n--- Phase 1: Data Transformation Step ---")
-
-    # NOTE: We now run the safe_cast_udf AGAIN on the clean data.
-    # This is because the original check was only to identify the bad rows.
+    log.info("\n--- Phase 1: Data Transformation Step ---")
     transformed_df = (
         clean_df.withColumn("temperature_double", safe_cast_udf(col("temperature")))
-        .filter(col("device_id").isNotNull())  # This filter is now redundant but safe to keep
+        .filter(col("device_id").isNotNull())
         .withColumn("event_hour", hour(from_unixtime(col("timestamp"))))
     )
 
@@ -105,18 +91,37 @@ def run_pipeline(spark: SparkSession, cfg: DictConfig):
         count("*").alias("record_count"),
     )
 
-    print("Data aggregated. Writing to processed directory...")
+    log.info("Data aggregated. Writing to processed directory...")
     aggregated_df.write.mode("overwrite").partitionBy("event_hour").parquet(
         cfg.paths.processed_data
     )
 
-    print("\nPipeline finished successfully!")
-    print("Check the 'data/processed' and 'data/quarantined' folders.")
+    # --- NEW: Create a run summary artifact ---
+    end_time = time.time()
+    summary = {
+        "run_time_seconds": round(end_time - start_time, 2),
+        "total_records_read": clean_count + quarantined_count,
+        "valid_records_processed": clean_count,
+        "quarantined_records": quarantined_count,
+        "run_status": "Success",
+    }
+    summary_path = cfg.paths.get("run_summary_path", "run_summary.json")
+    with open(summary_path, "w") as f:
+        json.dump(summary, f, indent=4)
+
+    log.info(f"Pipeline finished successfully! Summary written to {summary_path}")
 
 
 @hydra.main(config_path="../conf", config_name="config", version_base=None)
 def main(cfg: DictConfig):
-    # ...
+    # This sets up the basic configuration for the logger.
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+
+    summary_path = cfg.paths.get("run_summary_path", "run_summary.json")
+    cleanup_output_dirs(cfg)
+
     spark = (
         SparkSession.builder.appName(cfg.spark.app_name)
         .master(cfg.spark.master)
@@ -124,9 +129,18 @@ def main(cfg: DictConfig):
         .config("spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version", "2")
         .getOrCreate()
     )
-
-    run_pipeline(spark, cfg)
-    spark.stop()
+    try:
+        run_pipeline(spark, cfg)
+    except Exception as e:
+        log.error("!!! PIPELINE FAILED !!!", exc_info=True)
+        # Create a failure summary if the pipeline crashes
+        summary = {"run_status": "Failure", "error_message": str(e)}
+        with open(summary_path, "w") as f:
+            json.dump(summary, f, indent=4)
+        raise e  # Re-raise the exception so the program still fails
+    finally:
+        spark.stop()
+        log.info("Spark session stopped.")
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@ paths:
   raw_data: "data/raw"
   processed_data: "data/processed"
   quarantined_data: "data/quarantined"
-  great_expectations_root: "great_expectations"
+  run_summary_path: "run_summary.json"
 
 # Data Generator Settings
 data_generator:

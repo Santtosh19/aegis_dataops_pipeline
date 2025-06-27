@@ -5,15 +5,16 @@ on: [push, pull_request]
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.10']
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3
-
-      - name: Set up Python 3.9
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: ${{ matrix.python-version }}
+
 
       - name: Cache Pip Dependencies
         uses: actions/cache@v3
@@ -32,8 +33,12 @@ jobs:
         run: ruff check .
 
       - name: Run Unit Tests with Coverage
-        # This now runs pytest and tells it to generate a coverage.xml report
         run: pytest --cov=aegis --cov-report=xml
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+            token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Generate Test Data
         run: |
@@ -55,3 +60,17 @@ jobs:
           path: |
             run_summary.json
             coverage.xml
+  security-scan:
+    name: Security Scan (Trufflehog)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # Fetch all history for a deep scan
+
+      - name: Run Trufflehog secret scanner
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: .
+          extra_args: --debug

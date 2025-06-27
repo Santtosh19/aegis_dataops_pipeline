@@ -1,5 +1,7 @@
 # tests/test_pipeline.py
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 from pyspark.sql import SparkSession
 
 from aegis.pipeline import safe_cast_to_double, validate_and_separate_data
@@ -42,3 +44,20 @@ def test_validation_and_separation(spark):
     clean_devices = [row.device_id for row in clean_df.collect()]
     assert "dev_1" in clean_devices
     assert "dev_5" in clean_devices
+
+
+@given(st.one_of(st.floats(allow_nan=False, allow_infinity=False), st.text()))
+def test_safe_cast_udf_hypothesis(value):
+    """
+    Property-based test for the casting UDF.
+    Hypothesis will generate hundreds of different float and text examples to find edge cases.
+    """
+    try:
+        # The UDF's Python function expects a single value, not a Spark column
+        result = safe_cast_to_double(str(value))
+        # The property we are testing is: the result must ALWAYS be
+        # either a float or None. The function should never crash.
+        assert isinstance(result, (float, type(None)))
+    except Exception as e:
+        # If any other exception occurs, the test fails.
+        pytest.fail(f"UDF failed on input '{value}' with exception: {e}")

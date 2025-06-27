@@ -7,6 +7,6 @@ hydra-core
 pytest
 pytest-cov
 hypothesis
-ruff
+ruff==0.1.7
 black
 pre-commit

@@ -1,8 +1,9 @@
 import hydra
 from omegaconf import DictConfig
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, from_unixtime, hour, avg, sum as _sum, count, udf
-from pyspark.sql.types import StructType, StructField, StringType, LongType, DoubleType
+from pyspark.sql.functions import avg, col, count, from_unixtime, hour, udf
+from pyspark.sql.functions import sum as _sum
+from pyspark.sql.types import DoubleType, LongType, StringType, StructField, StructType
 
 
 def safe_cast_to_double(value):

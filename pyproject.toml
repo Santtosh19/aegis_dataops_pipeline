@@ -19,7 +19,7 @@ dev = [
     "pytest",
     "pytest-cov",
     "hypothesis",
-    "ruff",
+    "ruff==0.1.7",
     "black",
     "pre-commit"
 ]
@@ -27,7 +27,9 @@ dev = [
 # Configuration for Ruff (our linter)
 [tool.ruff]
 line-length = 100
-select = ["E", "F", "W", "I", "C90", "N", "UP", "B"] # Select rule sets
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "C90", "N", "UP", "B"]
 ignore = []
 
 # Configuration for Black (our formatter)

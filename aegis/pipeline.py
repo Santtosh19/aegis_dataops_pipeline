@@ -51,28 +51,21 @@ def validate_and_separate_data(df: DataFrame) -> tuple[DataFrame, DataFrame]:
     """
     print("Applying data quality rules...")
 
-    # Rule 1: device_id must not be null
-    rule1_bad_records = df.filter(col("device_id").isNull())
-
-    # Rule 2: status_code must be one of the valid codes
+    # Define all the "good" conditions at once
     valid_status_codes = ["200", "201", "400", "404", "500"]
-    rule2_bad_records = df.filter(~col("status_code").isin(valid_status_codes))
 
-    # Rule 3: temperature must be a valid number
-    # We find bad records by checking where our safe cast UDF returns null
-    rule3_bad_records = (
-        df.withColumn("temp_double", safe_cast_udf(col("temperature")))
-        .filter(col("temp_double").isNull())
-        .drop("temp_double")
+    # We chain all the conditions for what makes a "clean" record
+    clean_df = df.filter(
+        col("device_id").isNotNull()
+        & col("status_code").isin(valid_status_codes)
+        &
+        # Check that our safe cast does NOT produce a null
+        safe_cast_udf(col("temperature")).isNotNull()
     )
 
-    # Combine all bad records and remove duplicates
-    quarantined_df = (
-        rule1_bad_records.unionByName(rule2_bad_records).unionByName(rule3_bad_records).distinct()
-    )
-
-    # Get clean records by doing an "anti-join"
-    clean_df = df.join(quarantined_df, on=df.columns, how="left_anti")
+    # The quarantined records are simply all records that are NOT in the clean set.
+    # This is a much more reliable way to find them.
+    quarantined_df = df.join(clean_df, on=df.columns, how="left_anti")
 
     return clean_df, quarantined_df
 

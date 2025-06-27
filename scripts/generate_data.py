@@ -1,10 +1,11 @@
 import csv
+import os
 import random
 import time
 from pathlib import Path
 
 # --- Configuration ---
-NUM_RECORDS = 1_000_000
+NUM_RECORDS = int(os.environ.get("NUM_RECORDS", 1_000_000))
 NUM_FILES = 5
 DIRTY_FRACTION = 0.05
 OUTPUT_DIR = Path("data/raw")
